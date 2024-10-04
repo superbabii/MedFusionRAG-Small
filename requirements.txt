@@ -1,4 +1,6 @@
-elasticsearch==7.10.0
-transformers==4.9.2
-torch==1.9.0
-scikit-learn==0.24.2
+transformers
+datasets
+faiss-cpu
+torch
+scikit-learn
+openai==0.28
