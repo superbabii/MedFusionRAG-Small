@@ -87,38 +87,6 @@ def embed_text(model, tokenizer, text):
     outputs = model(**inputs)
     return outputs.last_hidden_state.mean(dim=1).detach().numpy()
 
-# Function to build and save FAISS index with better article validation
-def build_faiss_index(corpus, pubmed_index_path):
-    tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L6-v2')
-    model = AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2')
-    
-    embeddings = []
-    for doc in corpus:
-        if doc.strip():  # Ensure the document is not empty
-            try:
-                embedding = embed_text(model, tokenizer, doc)
-                embeddings.append(embedding)
-            except Exception as e:
-                print(f"Error embedding document: {doc[:100]}... - Error: {e}")
-    
-    if len(embeddings) == 0:
-        print("Error: No embeddings were generated. FAISS index cannot be built.")
-        return
-    
-    embeddings = np.vstack(embeddings)  # Convert list of embeddings to a NumPy array
-    
-    # Create a FAISS index
-    index = faiss.IndexFlatL2(embeddings.shape[1])
-    index.add(embeddings)  # Add embeddings to the index
-    
-    # Ensure the directory exists
-    output_dir = os.path.dirname(pubmed_index_path)
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Save FAISS index to disk
-    faiss.write_index(index, pubmed_index_path)
-    print(f"FAISS index has been saved to {pubmed_index_path}")
-
 # Function to load FAISS index
 def load_faiss_index(pubmed_index_path):
     if os.path.exists(pubmed_index_path):
