@@ -31,7 +31,7 @@ anemia_articles = fetch_pubmed_articles("anemia", max_articles=10)
 corpus = hypertension_articles + anemia_articles
 
 # Save as JSON
-with open('data/statpearls_corpus.json', 'w', encoding='utf-8') as f:
+with open('data/corpus.json', 'w', encoding='utf-8') as f:
     json.dump(corpus, f, ensure_ascii=False, indent=4)
 
-print("Saved PubMed articles to statpearls_corpus.json")
+print("Saved PubMed articles to corpus.json")

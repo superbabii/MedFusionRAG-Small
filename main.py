@@ -15,7 +15,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 openai.api_key = "sk-proj-u3PmINOij2w92y0cdl3xT3BlbkFJm3T5yhQttwfkkdp2rNdG"
 
 # Function to load the StatPearls corpus or another dataset from a JSON file
-def load_statpearls_corpus(file_path='data/statpearls_corpus.json'):
+def load_corpus(file_path='data/corpus.json'):
     """
     Loads the StatPearls corpus from a JSON file. Each entry should have a "text" field.
     """
@@ -105,10 +105,10 @@ class Generator:
 def main():
     # Paths
     index_path = 'D:/faiss/index'
-    corpus_path = 'data/statpearls_corpus.json'
+    corpus_path = 'data/corpus.json'
     
     # Load or build the FAISS index
-    corpus = load_statpearls_corpus(corpus_path)
+    corpus = load_corpus(corpus_path)
     if not os.path.exists(index_path):
         print("FAISS index not found. Building a new index...")
         build_faiss_index(corpus, index_path)
