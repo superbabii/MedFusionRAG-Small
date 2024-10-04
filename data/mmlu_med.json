@@ -1,0 +1,13 @@
+[
+    {
+      "question": "What is the treatment for hypertension in elderly patients?",
+      "options": ["A. ACE inhibitors", "B. Beta blockers", "C. Lifestyle change", "D. Surgery"],
+      "answer": "A"
+    },
+    {
+      "question": "What is the most common cause of heart failure in the elderly?",
+      "options": ["A. Hypertension", "B. Diabetes", "C. Coronary artery disease", "D. Chronic obstructive pulmonary disease"],
+      "answer": "C"
+    }
+  ]
+  
