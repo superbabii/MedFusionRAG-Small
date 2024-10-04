@@ -15,7 +15,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 # openai.api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = "sk-proj-u3PmINOij2w92y0cdl3xT3BlbkFJm3T5yhQttwfkkdp2rNdG"
 
-# Set your email for NCBI API
+# Set email for NCBI API
 Entrez.email = "nzrbabii@gmail.com"
 
 # Function to fetch PubMed articles based on a query
