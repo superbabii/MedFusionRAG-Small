@@ -5,7 +5,7 @@ import json
 Entrez.email = "nzrbabii@gmail.com"
 
 # Fetch articles from PubMed
-def fetch_pubmed_articles(query, max_articles=10000):
+def fetch_pubmed_articles(query, max_articles=100):
     search_handle = Entrez.esearch(db="pubmed", term=query, retmax=max_articles)
     search_results = Entrez.read(search_handle)
     search_handle.close()
