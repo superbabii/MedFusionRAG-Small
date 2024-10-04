@@ -1,5 +1,3 @@
-# run_pipeline.py
-import json
 from src.rag_pipeline import RAGPipeline
 from src.retriever import Retriever
 from src.generator import Generator
