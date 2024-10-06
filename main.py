@@ -11,7 +11,6 @@ from nltk.corpus import stopwords
 from nltk import pos_tag, word_tokenize
 import re
 import xml.etree.ElementTree as ET
-from pymed import PubMed
 
 # Download necessary NLTK resources
 nltk.download('punkt')
@@ -91,8 +90,6 @@ def fetch_pubmed_articles(query, max_articles=10):
         fetch_handle = Entrez.efetch(db="pubmed", id=pmids, rettype="xml", retmode="xml")
         articles_data = fetch_handle.read()
         fetch_handle.close()
-        
-        print("=========== articles_data ============")
                 
         # Parse the XML response
         root = ET.fromstring(articles_data)
@@ -113,30 +110,6 @@ def fetch_pubmed_articles(query, max_articles=10):
     except Exception as e:
         print(f"Failed with error: {e}.")
         return []
-
-# def fetch_pubmed_articles(query, max_articles=10):
-#     # Initialize the PubMed object
-#     pubmed = PubMed(tool="PubMedSearcher", email="nzrbabii@gmail.com")
-    
-#     try:
-#         # Fetch articles using the query
-#         results = pubmed.query(query, max_results=max_articles)
-        
-#         # Extract details from the articles
-#         articles = []
-#         for article in results:
-#             # Safely get PubMed ID and abstract text
-#             pubmed_id = article.pubmed_id if article.pubmed_id else "No PubMed ID available"
-#             abstract_text = article.abstract if article.abstract else "No abstract available"
-            
-#             # Append article info in the required format
-#             articles.append({"id": pubmed_id, "text": abstract_text})
-        
-#         return articles
-
-#     except Exception as e:
-#         print(f"An error occurred while fetching PubMed articles: {e}")
-#         return []
 
 # Function to build and save FAISS index with better article validation
 def build_faiss_index(corpus, pubmed_index_path):
