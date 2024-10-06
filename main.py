@@ -10,6 +10,8 @@ import nltk
 from nltk.corpus import stopwords
 from nltk import pos_tag, word_tokenize
 import re
+import xml.etree.ElementTree as ET
+from pymed import PubMed
 
 # Download necessary NLTK resources
 nltk.download('punkt')
@@ -22,7 +24,7 @@ nltk.download('averaged_perceptron_tagger_eng')
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # Load OpenAI API key from environment variables
-openai.api_key = "sk-proj-u3PmINOij2w92y0cdl3xT3BlbkFJm3T5yhQttwfkkdp2rNdG"
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Replace your email for NCBI API
 Entrez.email = "nzrbabii@gmail.com"
@@ -63,35 +65,78 @@ def extract_keywords(question):
     important_keywords = list(set(important_keywords))  # Remove duplicates
     
     # Limit the number of keywords to avoid overly broad queries (choose top 5 most relevant)
-    important_keywords = important_keywords[:10]
+    important_keywords = important_keywords[:3]
     
     # Join keywords with "AND" to form the final query
-    query = " OR ".join(important_keywords)
+    query = " AND ".join(important_keywords)
     print(f"Extracted Keywords for PubMed Query: {query}")
     return query
 
 # Function to fetch PubMed articles based on a query
-def fetch_pubmed_articles(query, max_articles=10, retries=3, delay=5):
+def fetch_pubmed_articles(query, max_articles=10):
     articles = []
-    for attempt in range(retries):
-        try:
-            print(f"Searching PubMed with query: {query}")  # Debugging: Print the exact query being sent
-            search_handle = Entrez.esearch(db="pubmed", term=query, retmax=max_articles)
-            search_results = Entrez.read(search_handle)
-            search_handle.close()
-            print(search_results)
-            ids = search_results["IdList"]
+    try:
+        print(f"Searching PubMed with query: {query}")  # Debugging: Print the exact query being sent
+        search_handle = Entrez.esearch(db="pubmed", term=query, retmax=max_articles)
+        search_results = Entrez.read(search_handle)
+        search_handle.close()
+        pmid_list = search_results["IdList"]
+        
+        # If no PMIDs are found, return an empty list
+        if not pmid_list:
+            print("No articles found.")
+            return []
+        
+        pmids = ",".join(pmid_list)
+        fetch_handle = Entrez.efetch(db="pubmed", id=pmids, rettype="xml", retmode="xml")
+        articles_data = fetch_handle.read()
+        fetch_handle.close()
+        
+        print("=========== articles_data ============")
+                
+        # Parse the XML response
+        root = ET.fromstring(articles_data)
 
-            for pubmed_id in ids:
-                fetch_handle = Entrez.efetch(db="pubmed", id=pubmed_id, rettype="abstract", retmode="text")
-                abstract = fetch_handle.read().strip()
-                fetch_handle.close()
-                if abstract:
-                    articles.append({"id": pubmed_id, "text": abstract})
-            return articles
-        except Exception as e:
-            print(f"Attempt {attempt + 1} failed with error: {e}. Retrying in {delay} seconds...")
-    return []
+        # Loop through the fetched articles
+        for article in root.findall(".//PubmedArticle"):
+            pubmed_id = article.find(".//PMID").text
+            abstract_text = ""
+            abstract_section = article.find(".//Abstract/AbstractText")
+            if abstract_section is not None:
+                abstract_text = abstract_section.text
+            
+            articles.append({"id": pubmed_id, "text": abstract_text})
+
+        print(articles)
+        return articles        
+
+    except Exception as e:
+        print(f"Failed with error: {e}.")
+        return []
+
+# def fetch_pubmed_articles(query, max_articles=10):
+#     # Initialize the PubMed object
+#     pubmed = PubMed(tool="PubMedSearcher", email="nzrbabii@gmail.com")
+    
+#     try:
+#         # Fetch articles using the query
+#         results = pubmed.query(query, max_results=max_articles)
+        
+#         # Extract details from the articles
+#         articles = []
+#         for article in results:
+#             # Safely get PubMed ID and abstract text
+#             pubmed_id = article.pubmed_id if article.pubmed_id else "No PubMed ID available"
+#             abstract_text = article.abstract if article.abstract else "No abstract available"
+            
+#             # Append article info in the required format
+#             articles.append({"id": pubmed_id, "text": abstract_text})
+        
+#         return articles
+
+#     except Exception as e:
+#         print(f"An error occurred while fetching PubMed articles: {e}")
+#         return []
 
 # Function to build and save FAISS index with better article validation
 def build_faiss_index(corpus, pubmed_index_path):
@@ -147,7 +192,7 @@ def retrieve_documents(index, query, model, tokenizer, corpus, top_k=5):
 
 # Generator class to interact with OpenAI API
 class Generator:
-    def __init__(self, model="gpt-4"):
+    def __init__(self, model="gpt-3.5-turbo"):
         self.model = model
     
     def generate_answer(self, question, context, options):
@@ -209,7 +254,7 @@ def main():
     # Fetch PubMed articles based on the question and options
     print("Fetching PubMed articles...")
     query = extract_keywords(question)
-    fetched_articles = fetch_pubmed_articles(query, max_articles=10)
+    fetched_articles = fetch_pubmed_articles(query, max_articles=5)
     
     # Save fetched articles to a corpus file (for future use)
     with open(pubmed_corpus_path, 'w', encoding='utf-8') as f:
