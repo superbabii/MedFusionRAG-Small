@@ -1,4 +1,3 @@
-#main.py
 import os
 import random
 import json
@@ -7,41 +6,92 @@ import numpy as np
 from transformers import AutoTokenizer, AutoModel
 import openai
 from Bio import Entrez
+import nltk
+from nltk.corpus import stopwords
+from nltk import pos_tag, word_tokenize
+import re
+
+# Download necessary NLTK resources
+nltk.download('punkt')
+nltk.download('punkt_tab')
+nltk.download('stopwords')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('averaged_perceptron_tagger_eng')
 
 # Set environment variable to allow duplicated OpenMP libraries
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # Load OpenAI API key from environment variables
-# openai.api_key = os.getenv("OPENAI_API_KEY")
 openai.api_key = "sk-proj-u3PmINOij2w92y0cdl3xT3BlbkFJm3T5yhQttwfkkdp2rNdG"
 
-# Set email for NCBI API
+# Replace your email for NCBI API
 Entrez.email = "nzrbabii@gmail.com"
 
+# Function to load random question and its correct answer
+def load_random_question_with_answer(mmlu_path):
+    try:
+        with open(mmlu_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            # Randomly select a question
+            random_question = random.choice(list(data.values()))
+            question = random_question['question']
+            options = random_question['options']
+            correct_answer = random_question['answer']
+            return question, options, correct_answer
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON in {mmlu_path}: {e}")
+    except Exception as e:
+        print(f"Error loading or parsing {mmlu_path}: {e}")
+    return None, None, None
+
+# Function to extract keywords using POS tagging and stopword removal
+def extract_keywords(question):
+    # Tokenize and remove stopwords
+    words = word_tokenize(question)
+    stop_words = set(stopwords.words('english'))
+    filtered_words = [word for word in words if word.lower() not in stop_words and word.isalpha()]
+
+    # POS tagging to extract relevant words (nouns, adjectives)
+    pos_tags = pos_tag(filtered_words)
+    
+    # Use only specific part-of-speech tags for extracting important terms
+    important_keywords = [word for word, tag in pos_tags if tag.startswith('NN') or tag.startswith('JJ')]
+    
+    # Further filter keywords to remove generic terms
+    important_keywords = [word for word in important_keywords if len(word) > 3]  # Remove very short words
+    important_keywords = [word for word in important_keywords if not re.match(r'^[a-zA-Z]$', word)]  # Remove single letters
+    important_keywords = list(set(important_keywords))  # Remove duplicates
+    
+    # Limit the number of keywords to avoid overly broad queries (choose top 5 most relevant)
+    important_keywords = important_keywords[:10]
+    
+    # Join keywords with "AND" to form the final query
+    query = " OR ".join(important_keywords)
+    print(f"Extracted Keywords for PubMed Query: {query}")
+    return query
+
 # Function to fetch PubMed articles based on a query
-def fetch_pubmed_articles(query, max_articles=100):
-    search_handle = Entrez.esearch(db="pubmed", term=query, retmax=max_articles)
-    search_results = Entrez.read(search_handle)
-    search_handle.close()
-    
-    ids = search_results["IdList"]
+def fetch_pubmed_articles(query, max_articles=10, retries=3, delay=5):
     articles = []
-    
-    for pubmed_id in ids:
-        fetch_handle = Entrez.efetch(db="pubmed", id=pubmed_id, rettype="abstract", retmode="text")
-        abstract = fetch_handle.read()
-        fetch_handle.close()
-        
-        # Ensure the abstract is not empty or too short
-        if abstract.strip():
-            articles.append({"id": pubmed_id, "text": abstract.strip()})
-        else:
-            print(f"Warning: Article {pubmed_id} has no abstract.")
-    
-    if not articles:
-        print("Error: No valid articles were fetched from PubMed.")
-    
-    return articles
+    for attempt in range(retries):
+        try:
+            print(f"Searching PubMed with query: {query}")  # Debugging: Print the exact query being sent
+            search_handle = Entrez.esearch(db="pubmed", term=query, retmax=max_articles)
+            search_results = Entrez.read(search_handle)
+            search_handle.close()
+            print(search_results)
+            ids = search_results["IdList"]
+
+            for pubmed_id in ids:
+                fetch_handle = Entrez.efetch(db="pubmed", id=pubmed_id, rettype="abstract", retmode="text")
+                abstract = fetch_handle.read().strip()
+                fetch_handle.close()
+                if abstract:
+                    articles.append({"id": pubmed_id, "text": abstract})
+            return articles
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed with error: {e}. Retrying in {delay} seconds...")
+    return []
 
 # Function to build and save FAISS index with better article validation
 def build_faiss_index(corpus, pubmed_index_path):
@@ -75,12 +125,6 @@ def build_faiss_index(corpus, pubmed_index_path):
     faiss.write_index(index, pubmed_index_path)
     print(f"FAISS index has been saved to {pubmed_index_path}")
 
-# Function to fetch articles based on a medical question and options
-def fetch_articles_for_question_and_options(question, options, max_articles=10):
-    # Join only relevant keywords from the options
-    combined_query = question + " " + " ".join([opt.split('.')[1].strip() for opt in options])
-    return fetch_pubmed_articles(combined_query, max_articles)
-
 # Function to embed text using HuggingFace model
 def embed_text(model, tokenizer, text):
     inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True)
@@ -101,24 +145,6 @@ def retrieve_documents(index, query, model, tokenizer, corpus, top_k=5):
     D, I = index.search(query_embedding, top_k)
     return [corpus[idx] for idx in I.flatten()]
 
-# Function to load random question and its correct answer
-def load_random_question_with_answer(mmlu_path):
-    try:
-        with open(mmlu_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            
-            # Randomly select a question
-            random_question = random.choice(data)
-            
-            question = random_question['question']
-            options = random_question['options']
-            correct_answer = random_question['answer']
-            
-            return question, options, correct_answer
-    except Exception as e:
-        print(f"Error loading or parsing {mmlu_path}: {str(e)}")
-        return None, None, None
-    
 # Generator class to interact with OpenAI API
 class Generator:
     def __init__(self, model="gpt-4"):
@@ -126,14 +152,15 @@ class Generator:
     
     def generate_answer(self, question, context, options):
         prompt = f"""
-        You are a helpful medical expert. You are provided with the following context from medical documents:
-        Context: {context}
+        You are a helpful medical expert. Given the following context from medical documents, answer the question.
         
-        The question is: {question}
-        The answer must be chosen from the following options: {', '.join(options)}
+        Context:
+        {context}
         
-        If the context does not contain direct information, use your medical knowledge to provide an answer based on general medical understanding.
-        Think step by step and then choose the best answer by selecting one of the options.
+        Question: {question}
+        Options: {', '.join(options.values())}
+        
+        Select the best answer by choosing one of the options (A, B, C, etc.). Respond with only the letter of the option.
         """
         
         try:
@@ -143,19 +170,18 @@ class Generator:
                 temperature=0
             )
             generated_text = response['choices'][0]['message']['content']
-            print(f"Generated Text: {generated_text}")  # Debugging step
+            print(f"Generated Text: {generated_text}")
             
             # Extract the option from the generated text
-            for option in options:
-                if option in generated_text:
-                    return option
+            for key, value in options.items():
+                if value in generated_text:
+                    return key
             # Fallback to the first option if no match is found
-            return options[0]
+            return list(options.keys())[0]
         
         except openai.error.OpenAIError as e:
             print(f"OpenAI API Error: {str(e)}")
-            return options[0]
-
+            return list(options.keys())[0]
 
 # Main function to combine the process
 def main():
@@ -176,18 +202,14 @@ def main():
     # Print the question and options
     print(f"Question: {question}")
     print("Options:")
-    for i, option in enumerate(options, start=1):
-        print(f"{i}. {option}")
-    
+    for key, option in options.items():
+        print(f"{key}. {option}")    
     print(f"Correct Answer: {correct_answer}")
-    
-    # # Take dynamic input from user
-    # question = input("Enter your medical question: ")
-    # options = input("Enter the options separated by commas (e.g., 'A. Option1, B. Option2, C. Option3'): ").split(", ")
     
     # Fetch PubMed articles based on the question and options
     print("Fetching PubMed articles...")
-    fetched_articles = fetch_articles_for_question_and_options(question, options, max_articles=10)
+    query = extract_keywords(question)
+    fetched_articles = fetch_pubmed_articles(query, max_articles=10)
     
     # Save fetched articles to a corpus file (for future use)
     with open(pubmed_corpus_path, 'w', encoding='utf-8') as f:
@@ -236,12 +258,8 @@ def main():
         # Output the selected answer
         print("Selected Answer:", selected_answer)
         
-        # Extract only the first letter of the selected answer and correct answer for comparison
-        selected_option = selected_answer.split('.')[0].strip()  # Extract 'A', 'B', 'C', etc.
-        correct_option = correct_answer.strip()
-        
         # Compare the selected answer with the correct answer
-        is_correct = selected_option.strip().lower() == correct_option.strip().lower()
+        is_correct = selected_answer.strip().upper() == correct_answer.strip().upper()
         print("Correct:", is_correct)
     else:
         print("Error: No valid documents for retrieval.")
