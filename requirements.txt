@@ -5,3 +5,4 @@ torch
 scikit-learn
 openai==0.28
 biopython
+nltk
